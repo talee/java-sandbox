@@ -7,14 +7,12 @@ import org.asynchttpclient.Response;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 
 import static org.asynchttpclient.Dsl.asyncHttpClient;
 
@@ -74,18 +72,18 @@ public class Main {
         CompletableFuture<Void> superFuture = null;
         List<String> results = new ArrayList<>();
         List<String> asyncResults = null;
-        CompletableFuture<String>[] futures = new CompletableFuture[callsPerBatch];
+        CompletableFuture<Response>[] futures = new CompletableFuture[callsPerBatch];
 
         try {
             for (int i = 0; i < callsPerBatch; i++) {
-                CompletableFuture<String> future = getAsync(httpClient, "https://twitter.com/POTUS/status/859786181537669120?_=" + (i+1), result -> results.add(result));
+                CompletableFuture<Response> future = getAsync(httpClient, "https://twitter.com/POTUS/status/859786181537669120?_=" + (i+1), result -> results.add(result));
                 futures[i] = future;
             }
             // Blocks until all futures are completed. Be sure to handle fast-fail exceptions.
             superFuture = CompletableFuture.allOf(futures);
             superFuture.get(20000, TimeUnit.MILLISECONDS);
             long collectStartTime = System.nanoTime();
-            asyncResults = Arrays.stream(futures).map(CompletableFuture::join).collect(Collectors.toList());
+            //asyncResults = Arrays.stream(futures).map(CompletableFuture::join).collect(Collectors.toList());
             System.out.println("Time taken to collect completed results: " + timeElapsedSince(collectStartTime));
         } catch (InterruptedException e) {
             System.err.println("Catch: Interrupted");
@@ -100,14 +98,19 @@ public class Main {
         }
 
         System.out.println("Number of results: " + results.size());
-        System.out.println("Number of asyncResults: " + asyncResults.size());
+        //System.out.println("Number of asyncResults: " + asyncResults.size());
         if (results.size() != callsPerBatch) {
             System.err.println("Result size mismatch or incomplete");
         }
+        /*
         if (asyncResults.size() != callsPerBatch) {
             System.err.println("Async result size mismatch or incomplete");
         }
         for (String result : asyncResults) {
+            System.out.println(result);
+        }
+        */
+        for (String result : results) {
             System.out.println(result);
         }
         System.out.println("Total time taken to fetch and aggregate: " + timeElapsedSince(startTime));
@@ -120,13 +123,13 @@ public class Main {
         }
     }
 
-    public static CompletableFuture<String> getAsync(AsyncHttpClient httpClient, String url, Consumer<String> handleResult) {
+    public static CompletableFuture<Response> getAsync(AsyncHttpClient httpClient, String url, Consumer<String> handleResult) {
         long startTime = System.nanoTime();
         ListenableFuture<Response> promise = httpClient.prepareGet(url).execute();
         CompletableFuture<Response> future = promise.toCompletableFuture();
         boolean failOnNon200 = false;
         return future
-            .handle((response, ex) -> {
+            .whenComplete((response, ex) -> {
                 if (ex != null) {
                     System.err.println("whenComplete exception: " + ex);
                     throw new RuntimeException(ex);
@@ -156,7 +159,6 @@ public class Main {
                     System.err.println("Null result");
                 }
                 handleResult.accept(result);
-                return result;
             });
     }
 
